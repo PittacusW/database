@@ -45,5 +45,8 @@ class BackupDatabaseCommand extends Command {
    $command = sprintf('mysqldump -h %s -u %s -p\'%s\' %s | gzip -c > %s', $host, $user, $pass, $db, $file);
    echo exec($command);
   });
+  exec("git add .");
+  exec('git commit -m "Backup"');
+  exec('git push');
  }
 }
