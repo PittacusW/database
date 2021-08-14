@@ -35,8 +35,8 @@ class GitAddCommand extends Command {
   */
  public function handle() {
   $message = empty($this->argument('message')) ? 'Backup' : $this->argument('message');
-  echo exec("git add .");
-  echo exec('git commit -m "' . $message . '"');
-  echo exec('git push');
+  $this->line(exec("git add ."));
+  $this->line(exec('git commit -m "' . $message . '"'));
+  $this->line(exec('git push'));
  }
 }

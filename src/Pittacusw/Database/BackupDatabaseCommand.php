@@ -46,7 +46,9 @@ class BackupDatabaseCommand extends Command {
    $name    = 'Tables_in_' . $db;
    $file    = "database/sql/" . $table->$name . ".sql.gz";
    $command = sprintf('mysqldump -h %s -u %s -p\'%s\' %s | gzip -c > %s', $host, $user, $pass, $db, $file);
-   echo exec($command);
+   $this->line('Backing up ' . $table->$name);
+   $this->line(exec($command));
+   $this->line('Back up of ' . $table->$name . ' completed');
   });
  }
 }

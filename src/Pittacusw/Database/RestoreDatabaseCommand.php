@@ -49,7 +49,9 @@ class RestoreDatabaseCommand extends Command {
     }
     $sql     = "database/sql/" . $file;
     $command = sprintf('mysql -h %s -u %s -p\'%s\' %s < %s', $host, $user, $pass, $db, $sql);
-    echo exec($command);
+    $this->line('Restoring ' . str_replace('.sql.gz', '', $file));
+    $this->line(exec($command));
+    $this->line('Restoring of ' . str_replace('.sql.gz', '', $file) . ' completed');
    }
    closedir($handle);
   }
