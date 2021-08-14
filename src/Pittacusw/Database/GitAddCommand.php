@@ -10,7 +10,7 @@ class GitAddCommand extends Command {
   *
   * @var string
   */
- protected $signature = 'git:add';
+ protected $signature = 'git:add {message?}';
 
  /**
   * The console command description.
@@ -34,8 +34,9 @@ class GitAddCommand extends Command {
   * @return int
   */
  public function handle() {
+  $message = empty($this->argument('message')) ? 'Backup' : $this->argument('message');
   echo exec("git add .");
-  echo exec('git commit -m "Backup"');
+  echo exec('git commit -m "' . $message . '"');
   echo exec('git push');
  }
 }
