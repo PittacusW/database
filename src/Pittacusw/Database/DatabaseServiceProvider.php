@@ -31,12 +31,21 @@ class DatabaseServiceProvider extends ServiceProvider {
   $this->app->singleton('command.db.restore', function($app) {
    return new \Pittacusw\Database\RestoreDatabaseCommand;
   });
-
   $this->commands('command.db.restore');
+
   $this->app->singleton('command.db.backup', function($app) {
    return new \Pittacusw\Database\BackupDatabaseCommand;
   });
-
   $this->commands('command.db.backup');
+
+  $this->app->singleton('command.db.iseed', function($app) {
+   return new \Pittacusw\Database\IseedDatabaseCommand;
+  });
+  $this->commands('command.db.iseed');
+
+  $this->app->singleton('command.git.add', function($app) {
+   return new \Pittacusw\Database\GitAddCommandCommand();
+  });
+  $this->commands('command.git.add');
  }
 }
