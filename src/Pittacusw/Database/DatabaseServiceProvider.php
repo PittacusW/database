@@ -44,7 +44,7 @@ class DatabaseServiceProvider extends ServiceProvider {
   $this->commands('command.db.iseed');
 
   $this->app->singleton('command.git.add', function($app) {
-   return new \Pittacusw\Database\GitAddCommandCommand();
+   return new \Pittacusw\Database\GitAddCommand;
   });
   $this->commands('command.git.add');
  }

@@ -4,7 +4,7 @@ namespace Pittacusw\Database;
 
 use Illuminate\Console\Command;
 
-class GitAddCommandCommand extends Command {
+class GitAddCommand extends Command {
  /**
   * The name and signature of the console command.
   *
