@@ -45,7 +45,7 @@ class BackupDatabaseCommand extends Command {
   collect(DB::select('SHOW TABLES'))->each(function($table) use ($db, $user, $host, $pass) {
    $name    = 'Tables_in_' . $db;
    $file    = "database/sql/" . $table->$name . ".sql.gz";
-   $command = sprintf('mysqldump -h %s -u %s -p\'%s\' %s | gzip -c > %s', $host, $user, $pass, $db, $file);
+   $command = sprintf('mysqldump -h %s -u %s -p\'%s\' %s %s | gzip -c > %s', $host, $user, $pass, $db, $table->$name, $file);
    $this->line('Backing up ' . $table->$name);
    $this->line(exec($command));
    $this->line('Back up of ' . $table->$name . ' completed');
