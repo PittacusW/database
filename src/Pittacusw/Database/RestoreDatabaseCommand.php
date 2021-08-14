@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Console\Commands;
+namespace Pittacusw\Database;
 
 use Illuminate\Console\Command;
 
