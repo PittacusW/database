@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\File;
 
 class RestoreDatabaseCommand extends Command {
  /**
@@ -39,19 +38,20 @@ class RestoreDatabaseCommand extends Command {
   $user = env('DB_USERNAME');
   $pass = env('DB_PASSWORD');
   $db   = env('DB_DATABASE');
-  foreach (config('locales') as $locale) {
-   $file = "database/sql/{$locale['words']}.sql.gz";
-   if (File::exists($file)) {
-    echo exec("mysql -u {$user} -p\"{$pass}\" -h {$host} {$db} < {$file}");
+  $path = "database/sql";
+  if ($handle = opendir($path)) {
+   while (FALSE !== ($file = readdir($handle))) {
+    if ('.' === $file) {
+     continue;
+    }
+    if ('..' === $file) {
+     continue;
+    }
+    $sql     = "database/sql/" . $file;
+    $command = sprintf('mysql -h %s -u %s -p\'%s\' %s < %s', $host, $user, $pass, $db, $sql);
+    echo exec($command);
    }
-   if (File::exists($file)) {
-    $file = "database/sql/{$locale['previous_queries']}.sql.gz";
-    echo exec("mysql -u {$user} -p\"{$pass}\" -h {$host} {$db} < {$file}");
-   }
-   $file = "database/sql/{$locale['sitemap']}.sql.gz";
-   if (File::exists($file)) {
-    echo exec("mysql -u {$user} -p\"{$pass}\" -h {$host} {$db} < {$file}");
-   }
+   closedir($handle);
   }
  }
 }

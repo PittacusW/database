@@ -28,12 +28,15 @@ class DatabaseServiceProvider extends ServiceProvider {
   * @return void
   */
  public function register() {
-  $this->registerResources();
-
   $this->app->singleton('command.db.backup', function($app) {
    return new BackupDatabaseCommand;
   });
 
   $this->commands('command.db.backup');
+  $this->app->singleton('command.db.restore', function($app) {
+   return new BackupDatabaseCommand;
+  });
+
+  $this->commands('command.db.restore');
  }
 }
