@@ -9,11 +9,12 @@
   ],
   "require": {
     "php": "^7.2|^8.0",
-    "illuminate/support": "^7.0|^8.0"
+    "illuminate/support": "^7.0|^8.0",
+    "orangehill/iseed": "^3.0",
+    "laravel/framework": "^8.0"
   },
   "require-dev": {
     "mockery/mockery": "^1.0.0",
-    "orangehill/iseed": "^3.0",
     "phpunit/phpunit": "^8.0"
   },
   "autoload": {
