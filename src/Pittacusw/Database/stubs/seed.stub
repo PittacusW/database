@@ -1,0 +1,28 @@
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
+
+class {{class}} extends Seeder
+{
+
+    /**
+     * Auto generated seed file
+     *
+     * @return void
+     */
+    public function run()
+    {
+        {{prerun_event}}
+
+        Schema::disableForeignKeyConstraints();
+        DB::table('{{table}}')->truncate();
+        {{insert_statements}}
+        Schema::enableForeignKeyConstraints();
+
+        {{postrun_event}}
+    }
+}

@@ -10,8 +10,6 @@
   "require": {
     "php": "^7.2|^8.0",
     "illuminate/support": "^7.0|^8.0",
-    "orangehill/iseed": "^3.0",
-    "doctrine/dbal": "^3.1",
     "laravel/framework": "^8.0"
   },
   "require-dev": {
@@ -21,10 +19,7 @@
   "autoload": {
     "psr-0": {
       "Pittacusw\\Database": "src/"
-    },
-    "classmap": [
-      "src/Pittacusw/Database/Exceptions.php"
-    ]
+    }
   },
   "autoload-dev": {
     "psr-4": {
