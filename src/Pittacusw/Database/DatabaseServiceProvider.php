@@ -47,11 +47,6 @@ class DatabaseServiceProvider extends ServiceProvider {
   });
   $this->commands('command.db.iseed');
 
-  $this->app->singleton('command.git.add', function($app) {
-   return new GitAddCommand;
-  });
-  $this->commands('command.git.add');
-
   $this->app->singleton('iseed', function($app) {
    return new Iseed;
   });
