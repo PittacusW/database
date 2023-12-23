@@ -29,7 +29,9 @@ class IseedDatabaseCommand extends Command {
  protected $ignore = [
   'migrations',
   'password_resets',
-  'failed_jobs'
+  'failed_jobs',
+ 'github_webhook_calls',
+ 'jobs'
  ];
 
  /**
