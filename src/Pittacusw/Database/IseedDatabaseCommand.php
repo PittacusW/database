@@ -62,8 +62,7 @@ class IseedDatabaseCommand extends Command {
     '--force'    => TRUE,
     '--clean'    => is_null($table),
     '--dumpauto' => FALSE,
-               '--chunksize'=>100,
-               '--exclude'=>'broken_column'
+               '--chunksize'=>100
    ]);
   }
  }
