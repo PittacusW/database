@@ -18,6 +18,8 @@ class {{class}} extends Seeder
     {
         {{prerun_event}}
 
+        DB::statement("SET time_zone = '+00:00'");
+
         Schema::disableForeignKeyConstraints();
         DB::table('{{table}}')->truncate();
         {{insert_statements}}
