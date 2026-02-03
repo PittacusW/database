@@ -133,6 +133,8 @@ class Iseed {
   * @return Collection
   */
  public function getData($table, $max, $exclude = NULL, $orderBy = NULL, $direction = 'ASC') {
+  DB::connection($this->databaseName)->statement("SET time_zone = '+00:00'");
+
   $result = DB::connection($this->databaseName)
               ->table($table);
 
