@@ -172,6 +172,9 @@ class Iseed {
    foreach ($data as $row) {
     $rowArray = [];
     foreach ($row as $columnName => $columnValue) {
+     if ($columnValue === '0000-00-00 00:00:00' || $columnValue === '0000-00-00') {
+      $columnValue = NULL;
+     }
      $rowArray[$columnName] = $columnValue;
     }
     $dataArray[] = $rowArray;
