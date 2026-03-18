@@ -2,68 +2,65 @@
 
 namespace Pittacusw\Database;
 
-ini_set("memory_limit", "-1");
-set_time_limit(0);
-
-use Illuminate\Support\Arr;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
-class IseedDatabaseCommand extends Command {
- /**
-  * The name and signature of the console command.
-  *
-  * @var string
-  */
- protected $signature = 'db:iseed {table?}';
+class IseedDatabaseCommand extends Command
+{
+    /**
+     * @var string
+     */
+    protected $signature = 'db:iseed
+        {table? : Table name to export. When omitted, every non-ignored table is exported}
+        {--database= : Database connection}
+        {--chunksize=100 : Rows per insert statement}';
 
- /**
-  * The console command description.
-  *
-  * @var string
-  */
- protected $description = 'Create a seed for all tables or a specified table';
+    /**
+     * @var string
+     */
+    protected $description = 'Create seeders for every table or for a specified table';
 
- /**
-  * Tables to be ignored
-  *
-  * @var string
-  */
- protected $ignore = [
-  'migrations',
-  'password_resets',
-  'failed_jobs',
- 'github_webhook_calls',
- 'jobs'
- ];
+    /**
+     * @var array<int, string>
+     */
+    protected $ignore = [
+        'migrations',
+        'password_resets',
+        'failed_jobs',
+        'github_webhook_calls',
+        'jobs',
+    ];
 
- /**
-  * Create a new command instance.
-  *
-  * @return void
-  */
- public function __construct() {
-  parent::__construct();
- }
+    public function handle()
+    {
+        $table = $this->argument('table');
+        $database = $this->option('database') ?: config('database.default');
+        $tables = $table ? [$table] : array_values(array_diff($this->tableNames($database), $this->ignore));
 
- /**
-  * Execute the console command.
-  *
-  * @return int
-  */
- public function handle() {
-  $table  = $this->argument('table');
-  $tables = with(empty($table) ? (collect(DB::select('SHOW TABLES'))
-   ->pluck('Tables_in_' . env('DB_DATABASE', 'homestead'))
-   ->diff(collect($this->ignore))) : collect(Arr::wrap($table)));
-  if ($tables->count()) {
-   $this->call('iseed', [
-    'tables'     => $tables->implode(','),
-    '--force'    => TRUE,
-    '--clean'    => is_null($table),
-    '--dumpauto' => FALSE,
-               '--chunksize'=>100
-   ]);
-  }
- }
+        if ($tables === []) {
+            $this->warn('No tables found to seed.');
+
+            return self::SUCCESS;
+        }
+
+        $this->call('iseed', [
+            'tables' => implode(',', $tables),
+            '--force' => true,
+            '--clean' => $table === null,
+            '--database' => $database,
+            '--dumpauto' => false,
+            '--chunksize' => (int) $this->option('chunksize'),
+        ]);
+
+        return self::SUCCESS;
+    }
+
+    protected function tableNames($connection)
+    {
+        return array_values(array_filter(array_map(static function ($row) {
+            $values = array_values((array) $row);
+
+            return $values[0] ?? null;
+        }, DB::connection($connection)->select('SHOW TABLES'))));
+    }
 }

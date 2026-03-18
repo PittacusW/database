@@ -3,14 +3,13 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class {{class}} extends Seeder
 {
-
     /**
-     * Auto generated seed file
+     * Auto-generated seed file.
      *
      * @return void
      */
@@ -21,9 +20,13 @@ class {{class}} extends Seeder
         DB::statement("SET time_zone = '+00:00'");
 
         Schema::disableForeignKeyConstraints();
-        DB::table('{{table}}')->truncate();
-        {{insert_statements}}
-        Schema::enableForeignKeyConstraints();
+
+        try {
+            DB::table('{{table}}')->truncate();
+            {{insert_statements}}
+        } finally {
+            Schema::enableForeignKeyConstraints();
+        }
 
         {{postrun_event}}
     }

@@ -1,40 +1,42 @@
 {
   "name": "pittacusw/database",
-  "description": "Generates a mysqldump for your Laravel site or restores it",
+  "description": "Generate Laravel seeders from existing MySQL tables and backup or restore database tables",
   "keywords": [
+    "artisan",
+    "database",
     "laravel",
-    "generators",
-    "seed",
-    "artisan"
+    "mysqldump",
+    "seed"
   ],
   "require": {
-     "php": "^8.2",
-    "laravel/framework": "^9.26|^10.0|^11.0|^12.0"
+    "php": "^8.0.2",
+    "laravel/framework": "^9.26|^10.0|^11.0|^12.0|^13.0"
   },
   "require-dev": {
-    "mockery/mockery": "^1.0.0",
-    "phpunit/phpunit": "^8.0"
+    "mockery/mockery": "^1.6",
+    "phpunit/phpunit": "^8.5|^9.6|^10.5|^11.5"
   },
   "autoload": {
-    "psr-0": {
-      "Pittacusw\\Database": "src/"
+    "psr-4": {
+      "Pittacusw\\Database\\": "src/Pittacusw/Database/"
     }
   },
   "autoload-dev": {
     "psr-4": {
-      "Pittacusw\\Database\\Tests\\": "tests"
+      "Pittacusw\\Database\\Tests\\": "tests/"
     }
   },
   "extra": {
     "laravel": {
       "providers": [
         "Pittacusw\\Database\\DatabaseServiceProvider"
-      ]
+      ],
+      "aliases": {
+        "Iseed": "Pittacusw\\Database\\Facades\\Iseed"
+      }
     }
   },
   "config": {
     "sort-packages": true
-  },
-  "minimum-stability": "dev",
-  "prefer-stable": true
+  }
 }
