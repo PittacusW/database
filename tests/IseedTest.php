@@ -78,9 +78,11 @@ PHP
 
         $iseed = m::mock(Iseed::class, [$this->files, $composer])->makePartial();
         $iseed->shouldReceive('hasTable')->once()->with('users')->andReturn(true);
-        $iseed->shouldReceive('getData')->once()->with('users', 0, [], 'id', 'DESC')->andReturn(collect([
-            ['id' => 1, 'name' => 'One'],
-        ]));
+        $iseed->shouldReceive('getDataChunks')->once()->with('users', 0, [], 'id', 'DESC', 1)->andReturn([
+            [
+                ['id' => 1, 'name' => 'One'],
+            ],
+        ]);
 
         $this->useIseed($iseed);
 
@@ -88,7 +90,35 @@ PHP
 
         $this->assertTrue($result);
         $this->assertFileExists($this->basePath.DIRECTORY_SEPARATOR.'database'.DIRECTORY_SEPARATOR.'seeders'.DIRECTORY_SEPARATOR.'UsersTableSeeder.php');
+        $this->assertStringContainsString("DB::table('users')->insert(", $this->files->get($this->basePath.DIRECTORY_SEPARATOR.'database'.DIRECTORY_SEPARATOR.'seeders'.DIRECTORY_SEPARATOR.'UsersTableSeeder.php'));
         $this->assertStringContainsString('$this->call(UsersTableSeeder::class);', $this->files->get($this->databaseSeederPath()));
+    }
+
+    public function testGenerateSeedAppendsMultipleInsertChunks()
+    {
+        $composer = m::mock(Composer::class, [$this->files, $this->basePath]);
+        $composer->shouldReceive('dumpAutoloads')->never();
+
+        $iseed = m::mock(Iseed::class, [$this->files, $composer])->makePartial();
+        $iseed->shouldReceive('hasTable')->once()->with('users')->andReturn(true);
+        $iseed->shouldReceive('getDataChunks')->once()->with('users', 0, [], null, 'ASC', 2)->andReturn([
+            [
+                ['id' => 1, 'name' => 'One'],
+                ['id' => 2, 'name' => 'Two'],
+            ],
+            [
+                ['id' => 3, 'name' => 'Three'],
+            ],
+        ]);
+
+        $result = $iseed->generateSeed('users', null, null, 'testing', 0, 2, [], null, null, false, true, null, 'ASC');
+
+        $this->assertTrue($result);
+
+        $contents = $this->files->get($this->basePath.DIRECTORY_SEPARATOR.'database'.DIRECTORY_SEPARATOR.'seeders'.DIRECTORY_SEPARATOR.'UsersTableSeeder.php');
+
+        $this->assertSame(2, substr_count($contents, "DB::table('users')->insert("));
+        $this->assertStringContainsString("'Three'", $contents);
     }
 
     public function testCleanSectionRemovesGeneratedSeederCallsButKeepsMarkers()
@@ -148,6 +178,31 @@ PHP
         $this->assertTrue($iseed->updateDatabaseSeederRunMethod('UsersTableSeeder'));
 
         $this->assertSame(1, substr_count($this->files->get($this->databaseSeederPath()), '$this->call(UsersTableSeeder::class);'));
+    }
+
+    public function testUpdateDatabaseSeederRunMethodSupportsTypedRunSignature()
+    {
+        $this->putDatabaseSeeder(<<<'PHP'
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+
+class DatabaseSeeder extends Seeder
+{
+    public function run(): void
+    {
+    }
+}
+PHP
+);
+
+        $iseed = new Iseed($this->files);
+
+        $this->assertTrue($iseed->updateDatabaseSeederRunMethod('UsersTableSeeder'));
+
+        $this->assertStringContainsString('$this->call(UsersTableSeeder::class);', $this->files->get($this->databaseSeederPath()));
     }
 
     public function testUpdateDatabaseSeederRunMethodAppendsMultipleEntriesWithinManagedMarkers()

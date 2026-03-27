@@ -113,6 +113,90 @@ class CommandTest extends TestCase
         $this->assertSame(250, $command->called[1]['--chunksize']);
     }
 
+    public function testIseedDatabaseCommandPopulatesTypedDatabaseSeeder()
+    {
+        $this->putDatabaseSeeder(<<<'PHP'
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+
+class DatabaseSeeder extends Seeder
+{
+    public function run(): void
+    {
+    }
+}
+PHP
+);
+
+        $composer = m::mock(\Illuminate\Support\Composer::class, [$this->files, $this->basePath]);
+        $composer->shouldReceive('dumpAutoloads')->never();
+
+        $iseed = m::mock(Iseed::class, [$this->files, $composer])->makePartial();
+        $iseed->shouldReceive('hasTable')->once()->with('users')->andReturn(true);
+        $iseed->shouldReceive('getDataChunks')->once()->with('users', null, [], null, 'ASC', 100)->andReturn([
+            [
+                ['id' => 1, 'name' => 'One'],
+            ],
+        ]);
+
+        $this->useIseed($iseed);
+
+        $command = new class($this->files) extends IseedDatabaseCommand {
+            public $tableNamesResponse = [];
+            protected $files;
+
+            public function __construct($files)
+            {
+                parent::__construct();
+                $this->files = $files;
+            }
+
+            public function call($command, array $arguments = [])
+            {
+                if ($command !== 'iseed') {
+                    return parent::call($command, $arguments);
+                }
+
+                $iseedCommand = new class($this->files) extends IseedCommand {
+                    protected function generateFileName($table, $prefix = null, $suffix = null)
+                    {
+                        $className = app('iseed')->generateClassName($table, $prefix, $suffix);
+                        $seedPath = app('iseed')->getSeedPath();
+
+                        return [
+                            app('iseed')->getPath($className, $seedPath),
+                            $className.'.php',
+                        ];
+                    }
+                };
+                $iseedCommand->setLaravel($this->laravel);
+
+                $tester = new CommandTester($iseedCommand);
+
+                return $tester->execute($arguments);
+            }
+
+            protected function tableNames($connection)
+            {
+                return $this->tableNamesResponse;
+            }
+        };
+        $command->setLaravel($this->app);
+        $command->tableNamesResponse = ['users'];
+
+        $tester = new CommandTester($command);
+        $exitCode = $tester->execute([
+            '--database' => 'testing',
+        ]);
+
+        $this->assertSame(0, $exitCode);
+        $this->assertStringContainsString('$this->call(UsersTableSeeder::class);', $this->files->get($this->databaseSeederPath()));
+        $this->assertFileExists($this->basePath.DIRECTORY_SEPARATOR.'database'.DIRECTORY_SEPARATOR.'seeders'.DIRECTORY_SEPARATOR.'UsersTableSeeder.php');
+    }
+
     public function testBackupCommandCreatesCompressedSqlFiles()
     {
         $command = new class($this->files) extends BackupDatabaseCommand {

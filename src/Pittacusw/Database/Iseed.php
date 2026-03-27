@@ -77,29 +77,37 @@ class Iseed
             throw new TableNotFoundException("Table {$table} was not found.");
         }
 
-        $data = $this->getData($table, $max, $exclude, $orderBy, $direction);
-        $dataArray = $this->repackSeedData($data);
         $className = $this->generateClassName($table, $prefix, $suffix);
         $stub = $this->readStubFile($this->getStubPath().DIRECTORY_SEPARATOR.'seed.stub');
         $seedPath = $this->getSeedPath();
+        $writeChunkSize = $chunkSize ?: 500;
 
         if (! $this->files->isDirectory($seedPath)) {
             $this->files->makeDirectory($seedPath, 0755, true);
         }
 
         $seedsPath = $this->getPath($className, $seedPath);
-        $seedContent = $this->populateStub(
+        [$seedHeader, $seedFooter] = $this->splitStubInsertStatements($this->populateStubMetadata(
             $className,
             $stub,
             $table,
-            $dataArray,
-            $chunkSize,
             $prerunEvent,
-            $postrunEvent,
-            $indexed
-        );
+            $postrunEvent
+        ));
 
-        $this->files->put($seedsPath, $seedContent);
+        $this->files->put($seedsPath, $seedHeader);
+
+        foreach ($this->getDataChunks($table, $max, $exclude, $orderBy, $direction, $writeChunkSize) as $chunk) {
+            $dataArray = $this->repackSeedData($chunk);
+
+            if ($dataArray === []) {
+                continue;
+            }
+
+            $this->files->append($seedsPath, $this->buildInsertStatements($table, $dataArray, $indexed));
+        }
+
+        $this->files->append($seedsPath, $seedFooter);
 
         if ($dumpAuto) {
             $this->composer->dumpAutoloads();
@@ -117,29 +125,43 @@ class Iseed
     {
         DB::connection($this->databaseName)->statement("SET time_zone = '+00:00'");
 
-        $query = DB::connection($this->databaseName)->table($table);
-        $exclude = array_values(array_filter((array) $exclude, static function ($column) {
-            return $column !== null && $column !== '';
-        }));
-
-        if ($exclude !== []) {
-            $allColumns = DB::connection($this->databaseName)
-                ->getSchemaBuilder()
-                ->getColumnListing($table);
-
-            $query = $query->select(array_values(array_diff($allColumns, $exclude)));
-        }
-
-        if ($orderBy) {
-            $direction = strtoupper((string) $direction);
-            $query = $query->orderBy($orderBy, in_array($direction, ['ASC', 'DESC'], true) ? $direction : 'ASC');
-        }
+        $query = $this->buildDataQuery($table, $exclude, $orderBy, $direction);
 
         if ($max) {
             $query = $query->limit($max);
         }
 
         return $query->get();
+    }
+
+    public function getDataChunks($table, $max, $exclude = null, $orderBy = null, $direction = 'ASC', $chunkSize = 500)
+    {
+        $chunkSize = $chunkSize ?: 500;
+
+        DB::connection($this->databaseName)->statement("SET time_zone = '+00:00'");
+
+        $query = $this->buildDataQuery($table, $exclude, $orderBy, $direction, true);
+        $rows = $query->lazy($chunkSize);
+        $processed = 0;
+        $chunk = [];
+
+        foreach ($rows as $row) {
+            if ($max && $processed >= $max) {
+                break;
+            }
+
+            $chunk[] = $row;
+            $processed++;
+
+            if (count($chunk) === $chunkSize) {
+                yield $chunk;
+                $chunk = [];
+            }
+        }
+
+        if ($chunk !== []) {
+            yield $chunk;
+        }
     }
 
     public function repackSeedData($data)
@@ -194,30 +216,11 @@ class Iseed
         $postrunEvent = null,
         $indexed = true
     ) {
-        $chunkSize = $chunkSize ?: 500;
-
-        $inserts = '';
-
-        foreach (array_chunk($data, $chunkSize) as $chunk) {
-            $this->addNewLines($inserts);
-            $this->addIndent($inserts, 2);
-            $inserts .= sprintf(
-                "DB::table('%s')->insert(%s);",
-                $table,
-                $this->prettifyArray($chunk, $indexed)
-            );
-        }
-
-        $stub = str_replace('{{class}}', $class, $stub);
-        $stub = str_replace('{{prerun_event}}', $this->buildEventBlock($prerunEvent, "Prerun event failed, seed wasn't executed!"), $stub);
-
-        if ($table !== null) {
-            $stub = str_replace('{{table}}', $table, $stub);
-        }
-
-        $stub = str_replace('{{postrun_event}}', $this->buildEventBlock($postrunEvent, 'Seed was executed but the postrun event failed!'), $stub);
-
-        return str_replace('{{insert_statements}}', $inserts, $stub);
+        return str_replace(
+            '{{insert_statements}}',
+            $this->buildInsertStatements($table, $data, $indexed, $chunkSize),
+            $this->populateStubMetadata($class, $stub, $table, $prerunEvent, $postrunEvent)
+        );
     }
 
     public function getPath($name, $path)
@@ -270,7 +273,7 @@ class Iseed
             );
         } else {
             $content = preg_replace(
-                '/(public function run\(\)\s*\{)(.*?)(\n\s*\})/s',
+                '/(public function run\(\)\s*(?::\s*[^\{]+)?\s*\{)(.*?)(\n\s*\})/s',
                 '$1$2'.$this->newLineCharacter.$this->indentCharacter.$this->indentCharacter.$call.'$3',
                 $content,
                 1
@@ -322,6 +325,24 @@ class Iseed
         return implode("\n", $lines);
     }
 
+    protected function buildInsertStatements($table, $data, $indexed = true, $chunkSize = null)
+    {
+        $chunkSize = $chunkSize ?: 500;
+        $inserts = '';
+
+        foreach (array_chunk($data, $chunkSize) as $chunk) {
+            $this->addNewLines($inserts);
+            $this->addIndent($inserts, 2);
+            $inserts .= sprintf(
+                "DB::table('%s')->insert(%s);",
+                $table,
+                $this->prettifyArray($chunk, $indexed)
+            );
+        }
+
+        return $inserts;
+    }
+
     private function addNewLines(&$content, $numberOfLines = 1)
     {
         $content .= str_repeat($this->newLineCharacter, $numberOfLines);
@@ -350,6 +371,60 @@ class Iseed
         $eventBlock .= '}';
 
         return $eventBlock;
+    }
+
+    private function buildDataQuery($table, $exclude = null, $orderBy = null, $direction = 'ASC', $ensureOrder = false)
+    {
+        $query = DB::connection($this->databaseName)->table($table);
+        $exclude = array_values(array_filter((array) $exclude, static function ($column) {
+            return $column !== null && $column !== '';
+        }));
+
+        if ($exclude !== []) {
+            $allColumns = DB::connection($this->databaseName)
+                ->getSchemaBuilder()
+                ->getColumnListing($table);
+
+            $query = $query->select(array_values(array_diff($allColumns, $exclude)));
+        }
+
+        $sortColumn = $orderBy ?: ($ensureOrder ? $this->defaultOrderByColumn($table, $exclude) : null);
+
+        if ($sortColumn) {
+            $direction = strtoupper((string) $direction);
+            $query = $query->orderBy($sortColumn, in_array($direction, ['ASC', 'DESC'], true) ? $direction : 'ASC');
+        }
+
+        return $query;
+    }
+
+    private function defaultOrderByColumn($table, array $exclude = [])
+    {
+        $columns = DB::connection($this->databaseName)
+            ->getSchemaBuilder()
+            ->getColumnListing($table);
+        $availableColumns = array_values(array_diff($columns, $exclude));
+
+        return $availableColumns[0] ?? null;
+    }
+
+    private function populateStubMetadata($class, $stub, $table, $prerunEvent = null, $postrunEvent = null)
+    {
+        $stub = str_replace('{{class}}', $class, $stub);
+        $stub = str_replace('{{prerun_event}}', $this->buildEventBlock($prerunEvent, "Prerun event failed, seed wasn't executed!"), $stub);
+
+        if ($table !== null) {
+            $stub = str_replace('{{table}}', $table, $stub);
+        }
+
+        return str_replace('{{postrun_event}}', $this->buildEventBlock($postrunEvent, 'Seed was executed but the postrun event failed!'), $stub);
+    }
+
+    private function splitStubInsertStatements($stub)
+    {
+        $parts = explode('{{insert_statements}}', $stub, 2);
+
+        return count($parts) === 2 ? $parts : [$stub, ''];
     }
 
     private function databaseSeederPath()
