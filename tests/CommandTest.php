@@ -247,6 +247,32 @@ PHP
         $this->assertFalse((bool) preg_grep('/^--password=/', $command->lastCommand));
     }
 
+    public function testBackupProcessStreamsLargeOutputWithoutBufferingItInMemory()
+    {
+        $command = new class($this->files) extends BackupDatabaseCommand {
+            public function runStreamingProcess(array $command, callable $callback)
+            {
+                return $this->runProcess($command, [], null, $callback);
+            }
+        };
+
+        $outputSize = 32 * 1024 * 1024;
+        $received = 0;
+        memory_reset_peak_usage();
+        $baseline = memory_get_usage();
+
+        $returned = $command->runStreamingProcess(
+            [PHP_BINARY, '-r', 'for ($i = 0; $i < 32; $i++) { echo str_repeat("x", 1048576); flush(); usleep(20000); }'],
+            function ($type, $buffer) use (&$received) {
+                $received += strlen($buffer);
+            }
+        );
+
+        $this->assertLessThan($outputSize / 2, memory_get_peak_usage() - $baseline);
+        $this->assertSame($outputSize, $received);
+        $this->assertSame('', $returned);
+    }
+
     public function testRestoreCommandDecompressesGzipFilesBeforeRunningMysql()
     {
         $directory = $this->basePath.DIRECTORY_SEPARATOR.'database'.DIRECTORY_SEPARATOR.'sql';

@@ -142,12 +142,22 @@ class BackupDatabaseCommand extends Command
             $process->setInput($input);
         }
 
-        $process->run($callback);
+        if ($callback === null) {
+            $process->run();
+        } else {
+            $process->run(static function ($type, $buffer) use ($process, $callback) {
+                $callback($type, $buffer);
+
+                if ($type === Process::OUT) {
+                    $process->clearOutput();
+                }
+            });
+        }
 
         if (! $process->isSuccessful()) {
             throw new ProcessFailedException($process);
         }
 
-        return $process->getOutput();
+        return $callback === null ? $process->getOutput() : '';
     }
 }
