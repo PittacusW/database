@@ -215,9 +215,8 @@ PHP
                 $this->lastCommand = $command;
                 $this->lastEnvironment = $environment;
 
-                foreach ((array) array_shift($this->processOutputs) as $chunk) {
-                    $callback(\Symfony\Component\Process\Process::OUT, $chunk);
-                }
+                $resultFile = substr((string) current(preg_grep('/^--result-file=/', $command)), strlen('--result-file='));
+                file_put_contents($resultFile, implode('', (array) array_shift($this->processOutputs)));
 
                 return '';
             }
@@ -245,32 +244,62 @@ PHP
         $this->assertContains('--skip-lock-tables', $command->lastCommand);
         $this->assertSame('secret', $command->lastEnvironment['MYSQL_PWD']);
         $this->assertFalse((bool) preg_grep('/^--password=/', $command->lastCommand));
+        $this->assertSame(['posts.sql.gz', 'users.sql.gz'], $this->backupDirectoryFiles());
     }
 
-    public function testBackupProcessStreamsLargeOutputWithoutBufferingItInMemory()
+    public function testBackupCommandRemovesPartialFilesWhenTheDumpFails()
     {
         $command = new class($this->files) extends BackupDatabaseCommand {
-            public function runStreamingProcess(array $command, callable $callback)
+            protected function tableNames($connection)
             {
-                return $this->runProcess($command, [], null, $callback);
+                return ['users'];
+            }
+
+            protected function runProcess(array $command, array $environment = [], $input = null, callable $callback = null)
+            {
+                $resultFile = substr((string) current(preg_grep('/^--result-file=/', $command)), strlen('--result-file='));
+                file_put_contents($resultFile, 'CREATE TABLE users');
+
+                throw new \RuntimeException('mysqldump failed');
+            }
+        };
+        $command->setLaravel($this->app);
+
+        try {
+            (new CommandTester($command))->execute(['--database' => 'testing', '--path' => 'database/sql']);
+            $this->fail('The backup should rethrow the dump failure.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('mysqldump failed', $exception->getMessage());
+        }
+
+        $this->assertSame([], $this->backupDirectoryFiles());
+    }
+
+    public function testBackupCompressesLargeDumpsWithoutLoadingThemIntoMemory()
+    {
+        $command = new class($this->files) extends BackupDatabaseCommand {
+            public function compress($source, $destination)
+            {
+                $this->compressFile($source, $destination, 1);
             }
         };
 
-        $outputSize = 32 * 1024 * 1024;
-        $received = 0;
+        $dumpSize = 32 * 1024 * 1024;
+        $source = $this->basePath.DIRECTORY_SEPARATOR.'large.sql';
+        $destination = $source.'.gz';
+        $handle = fopen($source, 'wb');
+        for ($i = 0; $i < 32; $i++) {
+            fwrite($handle, str_repeat('x', 1048576));
+        }
+        fclose($handle);
+
         memory_reset_peak_usage();
         $baseline = memory_get_usage();
 
-        $returned = $command->runStreamingProcess(
-            [PHP_BINARY, '-r', 'for ($i = 0; $i < 32; $i++) { echo str_repeat("x", 1048576); flush(); usleep(20000); }'],
-            function ($type, $buffer) use (&$received) {
-                $received += strlen($buffer);
-            }
-        );
+        $command->compress($source, $destination);
 
-        $this->assertLessThan($outputSize / 2, memory_get_peak_usage() - $baseline);
-        $this->assertSame($outputSize, $received);
-        $this->assertSame('', $returned);
+        $this->assertLessThan($dumpSize / 8, memory_get_peak_usage() - $baseline);
+        $this->assertSame($dumpSize, strlen(gzdecode(file_get_contents($destination))));
     }
 
     public function testRestoreCommandDecompressesGzipFilesBeforeRunningMysql()
@@ -375,5 +404,13 @@ PHP
 
         $this->assertSame(0, $exitCode);
         $this->assertStringContainsString('INSERT INTO users VALUES (2);', $command->lastInput);
+    }
+
+    private function backupDirectoryFiles()
+    {
+        $files = array_map('basename', glob($this->basePath.DIRECTORY_SEPARATOR.'database'.DIRECTORY_SEPARATOR.'sql'.DIRECTORY_SEPARATOR.'*'));
+        sort($files);
+
+        return $files;
     }
 }

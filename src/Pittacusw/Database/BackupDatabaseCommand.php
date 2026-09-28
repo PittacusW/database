@@ -13,6 +13,8 @@ class BackupDatabaseCommand extends Command
 {
     use InteractsWithMysql;
 
+    private const COMPRESS_CHUNK_SIZE = 1048576;
+
     /**
      * @var string
      */
@@ -63,38 +65,59 @@ class BackupDatabaseCommand extends Command
 
     protected function dumpTableToFile(array $config, $table, $path, $gzipLevel)
     {
+        $dumpPath = $path.'.sql.part';
         $temporaryPath = $path.'.part';
-        $handle = gzopen($temporaryPath, 'wb'.$gzipLevel);
-
-        if ($handle === false) {
-            throw new RuntimeException("Unable to open backup file [{$temporaryPath}] for writing.");
-        }
 
         try {
-            $this->runProcess(
-                $this->dumpCommand($config, $table),
-                $this->processEnvironment($config),
-                null,
-                function ($type, $buffer) use ($handle) {
-                    if ($type === Process::OUT && gzwrite($handle, $buffer) === false) {
-                        throw new RuntimeException('Unable to write the SQL dump output to the gzip stream.');
-                    }
-                }
-            );
+            $this->runProcess($this->dumpCommand($config, $table, $dumpPath), $this->processEnvironment($config));
+            $this->compressFile($dumpPath, $temporaryPath, $gzipLevel);
         } catch (\Throwable $exception) {
-            gzclose($handle);
             $this->files->delete($temporaryPath);
 
             throw $exception;
+        } finally {
+            $this->files->delete($dumpPath);
         }
-
-        gzclose($handle);
 
         if ($this->files->exists($path)) {
             $this->files->delete($path);
         }
 
         $this->files->move($temporaryPath, $path);
+    }
+
+    protected function compressFile($source, $destination, $gzipLevel)
+    {
+        $input = fopen($source, 'rb');
+
+        if ($input === false) {
+            throw new RuntimeException("Unable to open SQL dump [{$source}] for reading.");
+        }
+
+        $output = gzopen($destination, 'wb'.$gzipLevel);
+
+        if ($output === false) {
+            fclose($input);
+
+            throw new RuntimeException("Unable to open backup file [{$destination}] for writing.");
+        }
+
+        try {
+            while (! feof($input)) {
+                $chunk = fread($input, self::COMPRESS_CHUNK_SIZE);
+
+                if ($chunk === false) {
+                    throw new RuntimeException("Unable to read SQL dump [{$source}].");
+                }
+
+                if ($chunk !== '' && gzwrite($output, $chunk) === false) {
+                    throw new RuntimeException('Unable to write the SQL dump to the gzip stream.');
+                }
+            }
+        } finally {
+            fclose($input);
+            gzclose($output);
+        }
     }
 
     protected function tableNames($connection)
@@ -106,7 +129,7 @@ class BackupDatabaseCommand extends Command
         }, DB::connection($connection)->select('SHOW TABLES'))));
     }
 
-    protected function dumpCommand(array $config, $table)
+    protected function dumpCommand(array $config, $table, $resultFile)
     {
         return array_merge(
             [
@@ -116,6 +139,7 @@ class BackupDatabaseCommand extends Command
                 '--skip-comments',
                 '--skip-lock-tables',
                 '--hex-blob',
+                '--result-file='.$resultFile,
             ],
             $this->connectionArguments($config),
             [$config['database'], $table]
@@ -142,22 +166,12 @@ class BackupDatabaseCommand extends Command
             $process->setInput($input);
         }
 
-        if ($callback === null) {
-            $process->run();
-        } else {
-            $process->run(static function ($type, $buffer) use ($process, $callback) {
-                $callback($type, $buffer);
-
-                if ($type === Process::OUT) {
-                    $process->clearOutput();
-                }
-            });
-        }
+        $process->run($callback);
 
         if (! $process->isSuccessful()) {
             throw new ProcessFailedException($process);
         }
 
-        return $callback === null ? $process->getOutput() : '';
+        return $process->getOutput();
     }
 }
