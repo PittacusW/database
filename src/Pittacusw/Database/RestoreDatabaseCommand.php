@@ -6,7 +6,6 @@ use Illuminate\Console\Command;
 use Illuminate\Filesystem\Filesystem;
 use RuntimeException;
 use Symfony\Component\Process\Exception\ProcessFailedException;
-use Symfony\Component\Process\InputStream;
 use Symfony\Component\Process\Process;
 
 class RestoreDatabaseCommand extends Command
@@ -170,27 +169,11 @@ class RestoreDatabaseCommand extends Command
         $process = new Process($command, null, $environment);
         $process->setTimeout(null);
 
-        if (is_iterable($input)) {
-            $inputStream = new InputStream();
-            $process->setInput($inputStream);
-            $process->start($callback);
-
-            try {
-                foreach ($input as $chunk) {
-                    $inputStream->write($chunk);
-                }
-            } finally {
-                $inputStream->close();
-            }
-
-            $process->wait($callback);
-        } else {
-            if ($input !== null) {
-                $process->setInput($input);
-            }
-
-            $process->run($callback);
+        if ($input !== null) {
+            $process->setInput($input);
         }
+
+        $process->run($callback);
 
         if (! $process->isSuccessful()) {
             throw new ProcessFailedException($process);

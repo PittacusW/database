@@ -406,6 +406,46 @@ PHP
         $this->assertStringContainsString('INSERT INTO users VALUES (2);', $command->lastInput);
     }
 
+    public function testRestoreStreamsLargeDumpsWithoutLoadingThemIntoMemory()
+    {
+        $directory = $this->basePath.DIRECTORY_SEPARATOR.'database'.DIRECTORY_SEPARATOR.'sql';
+        $this->files->makeDirectory($directory, 0755, true);
+
+        $dumpSize = 64 * 1024 * 1024;
+        $handle = gzopen($directory.DIRECTORY_SEPARATOR.'large.sql.gz', 'wb1');
+        for ($i = 0; $i < 64; $i++) {
+            gzwrite($handle, str_repeat('x', 1048576));
+        }
+        gzclose($handle);
+
+        $command = new class($this->files) extends RestoreDatabaseCommand {
+            public $bytesReceived;
+
+            protected function restoreCommand(array $config)
+            {
+                return [PHP_BINARY, '-r', '$n = 0; while (! feof(STDIN)) { $n += strlen((string) fread(STDIN, 1048576)); } echo $n;'];
+            }
+
+            protected function runProcess(array $command, array $environment = [], $input = null, callable $callback = null)
+            {
+                return $this->bytesReceived = (int) parent::runProcess($command, $environment, $input, $callback);
+            }
+        };
+        $command->setLaravel($this->app);
+
+        memory_reset_peak_usage();
+        $baseline = memory_get_usage();
+
+        $exitCode = (new CommandTester($command))->execute([
+            '--database' => 'testing',
+            '--path' => 'database/sql',
+        ]);
+
+        $this->assertSame(0, $exitCode);
+        $this->assertLessThan($dumpSize / 8, memory_get_peak_usage() - $baseline);
+        $this->assertSame($dumpSize + strlen("SET FOREIGN_KEY_CHECKS=0;\n\nSET FOREIGN_KEY_CHECKS=1;\n"), $command->bytesReceived);
+    }
+
     private function backupDirectoryFiles()
     {
         $files = array_map('basename', glob($this->basePath.DIRECTORY_SEPARATOR.'database'.DIRECTORY_SEPARATOR.'sql'.DIRECTORY_SEPARATOR.'*'));
